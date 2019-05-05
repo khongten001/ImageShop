@@ -229,7 +229,7 @@ type
 
   TOperationNode = class(TSliderNode)
   private
-    FOperation: TPixelOperationProc;
+    FOperation: TPixelOperation;
     FInput: TNodePin;
     FOutput: TNodePin;
   protected
@@ -242,7 +242,7 @@ type
   public
     constructor Create(Owner: TNodeList); override;
     function Regenerate: Boolean; override;
-    property Operation: TPixelOperationProc read FOperation write FOperation;
+    property Operation: TPixelOperation read FOperation write FOperation;
     property Input: TNodePin read FInput;
     property Output: TNodePin read FOutput;
   end;
@@ -251,7 +251,7 @@ type
 
   TBlendNode = class(TSliderNode)
   private
-    FBlend: TPixelBlendProc;
+    FBlend: TPixelBlend;
     FImage: TPortableNetworkGraphic;
     FInputA: TNodePin;
     FInputB: TNodePin;
@@ -267,7 +267,7 @@ type
     constructor Create(Owner: TNodeList); override;
     destructor Destroy; override;
     function Regenerate: Boolean; override;
-    property Blend: TPixelBlendProc read FBlend write FBlend;
+    property Blend: TPixelBlend read FBlend write FBlend;
     property InputA: TNodePin read FInputA;
     property InputB: TNodePin read FInputB;
     property Output: TNodePin read FOutput;
@@ -280,6 +280,9 @@ procedure DrawString(Canvas: TCanvas; S: string; Rect: TRect; Direction: TDirect
 function PointInRect(const Rect: TRect; X, Y: Integer): Boolean;
 
 implementation
+
+var
+  SimpleWires: Boolean;
 
 function RectHeight(const Rect: TRect): Integer;
 begin
@@ -664,7 +667,6 @@ begin
     Result := nil;
 end;
 
-
 { TChildNode }
 
 constructor TChildNode.Create(Owner: TNodeList);
@@ -845,6 +847,48 @@ procedure TChildNode.Draw(Canvas: TCanvas);
     Canvas.Pen.Color := C;
   end;
 
+  procedure DrawWire(A, B: TPoint);
+  var
+    X: Integer;
+  begin
+    Canvas.MoveTo(FRect.Right, A.Y);
+    Canvas.LineTo(A.X, A.Y);
+    if B.X < A.X + GridSize then
+    begin
+      if B.Y > A.Y then
+      begin
+        Canvas.LineTo(A.X, FRect.Bottom + GridSize * 2);
+        Canvas.LineTo(B.X - GridSize div 2, FRect.Bottom + GridSize * 2);
+        Canvas.LineTo(B.X - GridSize div 2, B.Y);
+      end
+      else
+      begin
+        Canvas.LineTo(A.X, FRect.Top - GridSize * 2);
+        Canvas.LineTo(B.X - GridSize div 2, FRect.Top - GridSize * 2);
+        Canvas.LineTo(B.X - GridSize div 2, B.Y);
+      end;
+    end
+    else if (B.X - A.X > Abs(B.Y - A.Y)) then
+    begin
+      X := ((B.X - A.X) - Abs(B.Y - A.Y)) div 2;
+      Canvas.LineTo(A.X + X, A.Y);
+      Canvas.LineTo(B.X - X, B.Y);
+      Canvas.LineTo(B.X, B.Y);
+    end
+    else
+    begin
+      X := (B.X - A.X - GridSize) div 2;
+      Canvas.LineTo(A.X + X, A.Y);
+      Canvas.LineTo(A.X + X, B.Y);
+      Canvas.LineTo(B.X - GridSize, B.Y);
+    end;
+    B.X := B.X - GridSize;
+    Canvas.Brush.Color := Canvas.Pen.Color;
+    Canvas.Brush.Color := Canvas.Pen.Color;
+    Canvas.Rectangle(B.X + 1, B.Y - GridSize div 2 + 1,
+      B.X + GridSize - 1, B.Y + GridSize div 2 - 1);
+  end;
+
 var
   R: TRect;
   P: TPoint;
@@ -888,27 +932,37 @@ begin
     begin
       if OutputPin[I] = FDragPin then
       begin
-        P := OutputPin[I].FLocation;
-        Canvas.MoveTo(FRect.Right, P.Y);
-        Canvas.LineTo(P.X, P.Y);
-        P := FDragPoint;
-        Canvas.LineTo(P.X - GridSize, P.Y);
-        P.X := P.X - GridSize;
-        Canvas.Brush.Color := Canvas.Pen.Color;
-        Canvas.Rectangle(P.X, P.Y * (I + 1) - GridSize div 2 + 2,
-          P.X + GridSize - 2, P.Y * (I + 1) + GridSize div 2 - 1);
+        if SimpleWires then
+        begin
+          P := OutputPin[I].FLocation;
+          Canvas.MoveTo(FRect.Right, P.Y);
+          Canvas.LineTo(P.X, P.Y);
+          P := FDragPoint;
+          Canvas.LineTo(P.X - GridSize, P.Y);
+          P.X := P.X - GridSize;
+          Canvas.Brush.Color := Canvas.Pen.Color;
+          Canvas.Rectangle(P.X, P.Y * (I + 1) - GridSize div 2 + 2,
+            P.X + GridSize - 2, P.Y * (I + 1) + GridSize div 2 - 1);
+        end
+        else
+          DrawWire(OutputPin[I].FLocation, FDragPoint);
       end
       else if OutputPin[I].Connect <> nil then
       begin
-        P := OutputPin[I].FLocation;
-        Canvas.MoveTo(FRect.Right, P.Y);
-        Canvas.LineTo(P.X, P.Y);
-        P := OutputPin[I].Connect.FLocation;
-        P.X := P.X - GridSize;
-        Canvas.LineTo(P);
-        Canvas.Brush.Color := Canvas.Pen.Color;
-        Canvas.Rectangle(P.X, P.Y * (I + 1) - GridSize div 2 + 2,
-          P.X + GridSize - 2, P.Y * (I + 1) + GridSize div 2 - 1);
+        if SimpleWires then
+        begin
+          P := OutputPin[I].FLocation;
+          Canvas.MoveTo(FRect.Right, P.Y);
+          Canvas.LineTo(P.X, P.Y);
+          P := OutputPin[I].Connect.FLocation;
+          P.X := P.X - GridSize;
+          Canvas.LineTo(P);
+          Canvas.Brush.Color := Canvas.Pen.Color;
+          Canvas.Rectangle(P.X, P.Y * (I + 1) - GridSize div 2 + 2,
+            P.X + GridSize - 2, P.Y * (I + 1) + GridSize div 2 - 1);
+        end
+        else
+          DrawWire(OutputPin[I].FLocation, OutputPin[I].Connect.FLocation);
       end
       else
       begin
@@ -1153,30 +1207,42 @@ end;
 procedure TImageNode.LoadImage(const FileName: string);
 var
   P: TPicture;
-  Pixel: PPixel;
-  X, Y: Integer;
+  A, B: PPixel;
+  C: Byte;
+  I: Integer;
 begin
   P := TPicture.Create;
   try
     P.LoadFromFile(FileName);
+    FImage.Width := P.Width;
+    FImage.Height := P.Height;
+    FImage.PixelFormat := pf32bit;
     if (P.Graphic is TPortableNetworkGraphic) and
-    	(TPortableNetworkGraphic(P.Graphic).PixelFormat = pf32bit) then
+      (TPortableNetworkGraphic(P.Graphic).PixelFormat = pf32bit) then
     begin
-      FImage.Assign(P.Graphic);
+      A := TPortableNetworkGraphic(P.Graphic).ScanLine[0];
+      B := FImage.ScanLine[0];
+      for I := 1 to FImage.Width * FImage.Height do
+      begin
+        B^ := A^;
+        {$ifdef linux}
+        C := B.R;
+        B.R := B.B;
+        B.B := C;
+        {$endif}
+        Inc(A);
+        Inc(B);
+      end;
     end
     else
     begin
-      FImage.Width := P.Width;
-      FImage.Height := P.Height;
-      FImage.PixelFormat := pf32bit;
       FImage.Canvas.Draw(0, 0, P.Graphic);
-      Pixel := FImage.ScanLine[0];
-      for X := 1 to FImage.Width do
-        for Y := 1 to FImage.Height do
-        begin
-          Pixel.A := $FF;
-          Inc(Pixel);
-        end;
+      A := FImage.ScanLine[0];
+      for I := 1 to FImage.Width * FImage.Height do
+      begin
+        A.A := $FF;
+        Inc(A);
+      end;
     end;
     Regenerate;
     FFileName:= FileName;
@@ -1216,7 +1282,7 @@ begin
     FSurface.Height := 0;
     FSurface.Width := FImage.Width;
     FSurface.Height := FImage.Height;
-    FSurface.PixelFormat := FImage.PixelFormat;
+    FSurface.PixelFormat := pf32bit;
     A := FImage.ScanLine[0];
     B := FSurface.ScanLine[0];
     Move(A^, B^, FImage.Width * FImage.Height * SizeOf(TPixel));
@@ -1491,6 +1557,7 @@ begin
     begin
       FImage.Width := W;
       FImage.Height := H;
+      FImage.PixelFormat := pf32bit;
     end;
     Result := FImage;
   end
@@ -1584,5 +1651,7 @@ begin
   Result := 1;
 end;
 
+initialization
+  SimpleWires := ParamStr(1) = '-simple';
 end.
 
